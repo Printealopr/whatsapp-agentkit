@@ -34,7 +34,7 @@ Cuando generes el agente, SIEMPRE usa estas tecnologías:
 | Runtime | Python 3.11+ | Verificar en Fase 1 |
 | Servidor | FastAPI + Uvicorn | Webhook handler genérico |
 | IA | Anthropic Claude API | Modelo: `claude-sonnet-4-6` |
-| WhatsApp | Whapi.cloud / Meta Cloud API / Twilio | El usuario elige durante el setup |
+| WhatsApp | Meta Cloud API / Twilio | El usuario elige durante el setup |
 | Base de datos | SQLite (local) / PostgreSQL (prod) | Via SQLAlchemy |
 | Variables | python-dotenv | NUNCA hardcodear keys |
 | Contenedores | Docker Compose | Para producción |
@@ -70,7 +70,7 @@ agentkit/
 │   └── providers/
 │       ├── __init__.py    ← Factory: obtener_proveedor() según .env
 │       ├── base.py        ← Clase abstracta ProveedorWhatsApp
-│       └── whapi.py       ← Adaptador del proveedor elegido (o meta.py, o twilio.py)
+│       └── twilio.py      ← Adaptador del proveedor elegido (o meta.py)
 ├── config/
 │   ├── business.yaml      ← Datos del negocio (generado en entrevista)
 │   └── prompts.yaml       ← System prompt del agente (generado, poderoso y específico)
@@ -90,7 +90,7 @@ agentkit/
 ```
 WhatsApp (cliente escribe)
     ↓
-Proveedor de WhatsApp (Whapi / Meta / Twilio)
+Proveedor de WhatsApp (Meta / Twilio)
     ↓ webhook POST /webhook
 Providers (agent/providers/) — normaliza el mensaje a formato común
     ↓
@@ -219,23 +219,14 @@ PREGUNTA 8: ¿Tienes tu Anthropic API Key?
                      5. La key empieza con "sk-ant-..."
 
 PREGUNTA 9: ¿Qué servicio de WhatsApp quieres usar para conectar tu agente?
-            1. Whapi.cloud (RECOMENDADO) — El más fácil. Sandbox gratis, no requiere verificación.
+            1. Twilio (RECOMENDADO para empezar) — Sandbox gratis sin verificación,
+               muy confiable, buena documentación. Pago por mensaje en producción.
             2. Meta Cloud API — La API oficial de WhatsApp. Gratis por conversación, pero
                requiere cuenta de Facebook Business verificada.
-            3. Twilio — Muy confiable y con buena documentación. Más caro pero robusto.
 
-            Si no estás seguro, te recomiendo Whapi.cloud — es la opción más rápida para empezar.
+            Si solo quieres probar, Twilio es lo más rápido (sandbox gratis sin verificación).
 
 PREGUNTA 10: [Depende de la respuesta de PREGUNTA 9]
-
-            Si eligió WHAPI.CLOUD:
-                ¿Tienes tu token de Whapi.cloud?
-                Si SÍ → "Compártelo, lo guardaré en tu .env"
-                Si NO → Guiar paso a paso:
-                    1. Ve a whapi.cloud
-                    2. Crea una cuenta gratis (tienen sandbox)
-                    3. En el dashboard, copia tu API Token
-                    4. Listo, es todo lo que necesitamos
 
             Si eligió META CLOUD API:
                 Necesitamos 3 datos de tu app de Facebook:
@@ -407,74 +398,19 @@ from agent.providers.base import ProveedorWhatsApp
 
 def obtener_proveedor() -> ProveedorWhatsApp:
     """Retorna el proveedor de WhatsApp configurado en .env."""
-    proveedor = os.getenv("WHATSAPP_PROVIDER", "whapi").lower()
+    proveedor = os.getenv("WHATSAPP_PROVIDER", "").lower()
 
-    if proveedor == "whapi":
-        from agent.providers.whapi import ProveedorWhapi
-        return ProveedorWhapi()
-    elif proveedor == "meta":
+    if not proveedor:
+        raise ValueError("WHATSAPP_PROVIDER no configurado en .env. Usa: meta o twilio")
+
+    if proveedor == "meta":
         from agent.providers.meta import ProveedorMeta
         return ProveedorMeta()
     elif proveedor == "twilio":
         from agent.providers.twilio import ProveedorTwilio
         return ProveedorTwilio()
     else:
-        raise ValueError(f"Proveedor no soportado: {proveedor}. Usa: whapi, meta, o twilio")
-```
-
-**`agent/providers/whapi.py`** (si eligió Whapi.cloud):
-
-```python
-# agent/providers/whapi.py — Adaptador para Whapi.cloud
-# Generado por AgentKit
-
-import os
-import logging
-import httpx
-from fastapi import Request
-from agent.providers.base import ProveedorWhatsApp, MensajeEntrante
-
-logger = logging.getLogger("agentkit")
-
-
-class ProveedorWhapi(ProveedorWhatsApp):
-    """Proveedor de WhatsApp usando Whapi.cloud (REST API simple)."""
-
-    def __init__(self):
-        self.token = os.getenv("WHAPI_TOKEN")
-        self.url_envio = "https://gate.whapi.cloud/messages/text"
-
-    async def parsear_webhook(self, request: Request) -> list[MensajeEntrante]:
-        """Parsea el payload de Whapi.cloud."""
-        body = await request.json()
-        mensajes = []
-        for msg in body.get("messages", []):
-            mensajes.append(MensajeEntrante(
-                telefono=msg.get("chat_id", ""),
-                texto=msg.get("text", {}).get("body", ""),
-                mensaje_id=msg.get("id", ""),
-                es_propio=msg.get("from_me", False),
-            ))
-        return mensajes
-
-    async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
-        """Envía mensaje via Whapi.cloud."""
-        if not self.token:
-            logger.warning("WHAPI_TOKEN no configurado — mensaje no enviado")
-            return False
-        headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                self.url_envio,
-                json={"to": telefono, "body": mensaje},
-                headers=headers,
-            )
-            if r.status_code != 200:
-                logger.error(f"Error Whapi: {r.status_code} — {r.text}")
-            return r.status_code == 200
+        raise ValueError(f"Proveedor no soportado: {proveedor}. Usa: meta o twilio")
 ```
 
 **`agent/providers/meta.py`** (si eligió Meta Cloud API):
@@ -621,7 +557,7 @@ Genera el servidor FastAPI **provider-agnostic**:
 
 """
 Servidor principal del agente de WhatsApp.
-Funciona con cualquier proveedor (Whapi, Meta, Twilio) gracias a la capa de providers.
+Funciona con cualquier proveedor (Meta, Twilio) gracias a la capa de providers.
 """
 
 import os
@@ -1119,10 +1055,7 @@ Claude Code genera SOLO las variables del proveedor elegido (no las de los otros
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Proveedor de WhatsApp
-WHATSAPP_PROVIDER=whapi  # whapi | meta | twilio
-
-# --- Si WHATSAPP_PROVIDER=whapi ---
-WHAPI_TOKEN=...
+WHATSAPP_PROVIDER=  # meta | twilio
 
 # --- Si WHATSAPP_PROVIDER=meta ---
 # META_ACCESS_TOKEN=...
@@ -1281,23 +1214,17 @@ Solo ejecutar si el usuario confirma que quiere hacer deploy.
    Paso 3: Variables de entorno
       En Railway → tu proyecto → Variables, agrega:
       - ANTHROPIC_API_KEY = [tu key]
-      - WHATSAPP_PROVIDER = [whapi | meta | twilio]
+      - WHATSAPP_PROVIDER = [meta | twilio]
       - PORT = 8000
       - ENVIRONMENT = production
       - DATABASE_URL = [Railway te da una si agregas PostgreSQL]
       - [Variables del proveedor elegido — ver abajo]
 
-      Si WHAPI:    WHAPI_TOKEN
       Si META:     META_ACCESS_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
       Si TWILIO:   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
 
    Paso 4: Configura el webhook
       1. Copia la URL pública que Railway te asigna (ej: tu-app.up.railway.app)
-
-      Si WHAPI:
-         2. Ve a Whapi.cloud → Settings → Webhooks
-         3. URL: https://tu-app.up.railway.app/webhook
-         4. Método: POST → Guardar y activar
 
       Si META:
          2. Ve a developers.facebook.com → tu app → WhatsApp → Configuration
@@ -1389,11 +1316,8 @@ pip install -r requirements.txt
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Proveedor de WhatsApp (whapi | meta | twilio)
-WHATSAPP_PROVIDER=whapi
-
-# Whapi.cloud (si WHATSAPP_PROVIDER=whapi)
-WHAPI_TOKEN=...
+# Proveedor de WhatsApp (meta | twilio)
+WHATSAPP_PROVIDER=
 
 # Meta Cloud API (si WHATSAPP_PROVIDER=meta)
 # META_ACCESS_TOKEN=...

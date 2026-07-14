@@ -55,7 +55,7 @@ Te hace 10 preguntas, una por una:
 6. **Horario de atencion** — ej: "Lunes a Viernes 9am a 6pm"
 7. **Archivos de tu negocio** — menu, precios, FAQ (los pones en la carpeta /knowledge)
 8. **API Key de Anthropic** — la llave para usar Claude AI (te guia a obtenerla)
-9. **Proveedor de WhatsApp** — eliges entre Whapi.cloud, Meta, o Twilio
+9. **Proveedor de WhatsApp** — eliges entre Meta o Twilio
 10. **Credenciales del proveedor** — el token o keys de tu servicio de WhatsApp
 
 ### Paso 4: Claude Code construye tu agente (2-5 minutos)
@@ -72,7 +72,7 @@ tu-proyecto/
 │   └── providers/             Conexion con tu servicio de WhatsApp
 │       ├── base.py            Interfaz comun
 │       ├── __init__.py        Selecciona el proveedor automaticamente
-│       └── whapi.py           Adaptador (o meta.py, o twilio.py)
+│       └── twilio.py          Adaptador (o meta.py)
 │
 ├── config/                    ← CONFIGURACION
 │   ├── business.yaml          Datos de tu negocio
@@ -128,7 +128,7 @@ Despues de esto, cualquier persona que te escriba por WhatsApp sera atendida por
 Un cliente escribe "Hola" por WhatsApp
          |
          v
-Tu proveedor de WhatsApp (Whapi/Meta/Twilio) recibe el mensaje
+Tu proveedor de WhatsApp (Meta/Twilio) recibe el mensaje
          |
          v
 Envia el mensaje a tu servidor en Railway via webhook
@@ -191,11 +191,10 @@ claude
 
 | Proveedor | Dificultad | Costo | Mejor para |
 |-----------|-----------|-------|------------|
-| [Whapi.cloud](https://whapi.cloud) | Facil | Sandbox gratis | Empezar rapido, probar |
+| [Twilio](https://twilio.com) | Media | Sandbox gratis / Pago por mensaje | Empezar rapido, probar, empresas |
 | [Meta Cloud API](https://developers.facebook.com) | Media | Gratis por conversacion | Produccion seria |
-| [Twilio](https://twilio.com) | Media | Pago por mensaje | Empresas, alta confiabilidad |
 
-**Si no estas seguro, empieza con Whapi.cloud.** Es la opcion mas rapida — te registras, copias un token, y listo.
+**Si solo quieres probar rapido**, Twilio tiene sandbox gratis y no requiere verificacion. Para produccion seria, considera Meta Cloud API.
 
 ---
 
@@ -220,13 +219,14 @@ Claude Code te guia desde ahi. Solo responde las preguntas.
 
 ## Proveedores de WhatsApp
 
-AgentKit soporta 3 proveedores. Tu eliges cual usar durante el setup.
+AgentKit soporta 2 proveedores. Tu eliges cual usar durante el setup.
 
-### Whapi.cloud (recomendado para empezar)
-- Registrate en [whapi.cloud](https://whapi.cloud)
-- Tienen un sandbox gratuito (no necesitas verificar nada)
-- Solo necesitas: **1 token**
-- Ideal para probar y para negocios pequenos
+### Twilio (recomendado para empezar)
+- Registrate en [twilio.com](https://twilio.com)
+- Sandbox gratuito sin verificacion (ideal para probar)
+- Muy confiable, excelente documentacion
+- Necesitas: **Account SID** + **Auth Token** + **Phone Number**
+- Pago por mensaje en produccion
 
 ### Meta Cloud API (oficial)
 - Configura en [developers.facebook.com](https://developers.facebook.com)
@@ -234,13 +234,6 @@ AgentKit soporta 3 proveedores. Tu eliges cual usar durante el setup.
 - Necesitas: **Access Token** + **Phone Number ID** + **Verify Token**
 - Requiere cuenta de Facebook Business verificada
 - Gratis por conversacion (pagas solo por conversaciones iniciadas por ti)
-
-### Twilio
-- Registrate en [twilio.com](https://twilio.com)
-- Muy confiable, excelente documentacion
-- Necesitas: **Account SID** + **Auth Token** + **Phone Number**
-- Tiene sandbox para probar gratis
-- Pago por mensaje en produccion
 
 ---
 
@@ -290,7 +283,7 @@ claude "Agregamos un nuevo servicio de delivery. Actualiza el agente."
 claude "Quiero que el agente pueda consultar disponibilidad de citas."
 
 # Cambiar de proveedor de WhatsApp
-claude "Quiero migrar de Whapi a Meta Cloud API."
+claude "Quiero migrar de Twilio a Meta Cloud API."
 ```
 
 ---
@@ -303,7 +296,7 @@ Para los curiosos, esto es lo que se usa por debajo:
 |-----------|-----------|----------------|
 | IA | Claude AI (claude-sonnet-4-6) | Genera las respuestas inteligentes |
 | Servidor | FastAPI + Uvicorn | Recibe los webhooks de WhatsApp |
-| WhatsApp | Whapi.cloud / Meta / Twilio | Conecta con WhatsApp (tu eliges) |
+| WhatsApp | Meta / Twilio | Conecta con WhatsApp (tu eliges) |
 | Base de datos | SQLite (local) / PostgreSQL (prod) | Guarda historial de conversaciones |
 | Deploy | Docker + Railway | Pone tu agente en internet |
 | Config | python-dotenv + YAML | Maneja API keys y configuracion |
@@ -316,7 +309,7 @@ Para los curiosos, esto es lo que se usa por debajo:
 WhatsApp (cliente)
     |
     v
-Proveedor (Whapi/Meta/Twilio) ←→ agent/providers/ (normaliza formato)
+Proveedor (Meta/Twilio) ←→ agent/providers/ (normaliza formato)
     |
     v
 FastAPI (agent/main.py) ←→ agent/memory.py (historial SQLite)
@@ -329,7 +322,7 @@ Respuesta enviada de vuelta por WhatsApp
 ```
 
 El sistema usa un **patron adaptador** para proveedores de WhatsApp. Cada proveedor
-(Whapi, Meta, Twilio) implementa la misma interfaz, asi que `main.py` no sabe ni le
+(Meta, Twilio) implementa la misma interfaz, asi que `main.py` no sabe ni le
 importa cual estas usando. Solo llama `proveedor.parsear_webhook()` y
 `proveedor.enviar_mensaje()`.
 
@@ -343,7 +336,7 @@ No. Claude Code escribe todo el codigo por ti. Tu solo respondes preguntas.
 **Cuanto cuesta?**
 - AgentKit es gratis y open source
 - Claude API: pagas por uso (~$3/millon de tokens, muy barato para un bot)
-- WhatsApp: depende del proveedor (Whapi tiene sandbox gratis)
+- WhatsApp: depende del proveedor (Twilio tiene sandbox gratis para probar)
 - Railway: plan gratis disponible para proyectos pequenos
 
 **Puedo usar esto con mi negocio real?**
@@ -358,7 +351,7 @@ de nuestro equipo." Nunca inventa datos.
 Si. Clona el repo varias veces, uno por negocio. Cada agente es independiente.
 
 **Puedo cambiar de proveedor de WhatsApp despues?**
-Si. Abre Claude Code y dile: "Quiero cambiar de Whapi a Meta Cloud API."
+Si. Abre Claude Code y dile: "Quiero cambiar de Twilio a Meta Cloud API."
 El regenerara los archivos necesarios.
 
 ---

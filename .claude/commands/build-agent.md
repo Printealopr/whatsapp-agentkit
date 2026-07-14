@@ -12,7 +12,7 @@ FASE 1 — Bienvenida y verificación del entorno
 FASE 2 — Entrevista del negocio
 - Haz las 10 preguntas UNA POR UNA
 - Espera respuesta antes de continuar a la siguiente
-- PREGUNTA 9: el usuario elige su proveedor de WhatsApp (Whapi/Meta/Twilio)
+- PREGUNTA 9: el usuario elige su proveedor de WhatsApp (Meta/Twilio)
 - PREGUNTA 10: pide las credenciales específicas del proveedor elegido
 - Guarda todas las respuestas para la Fase 3
 
