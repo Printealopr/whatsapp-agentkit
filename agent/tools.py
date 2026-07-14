@@ -59,6 +59,14 @@ async def notificar_equipo(telefono_cliente: str, resumen: str) -> str:
             headers=headers,
         )
         if r.status_code == 200:
+            # Guardar el ID del mensaje enviado a Grace: cuando ella responda
+            # citando esa notificación, sabremos a qué cliente reenviar la respuesta
+            mensaje_id = r.json().get("message", {}).get("id", "")
+            if mensaje_id:
+                from agent.memory import guardar_notificacion
+                await guardar_notificacion(mensaje_id, telefono_cliente, resumen)
+            else:
+                logger.warning("Whapi no retornó ID del mensaje — la respuesta del equipo no podrá vincularse")
             logger.info(f"Equipo notificado sobre cliente {telefono_cliente}: {resumen}")
             return "equipo_notificado"
         else:

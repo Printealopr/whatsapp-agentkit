@@ -55,6 +55,8 @@ class ProveedorWhapi(ProveedorWhatsApp):
                 texto=texto,
                 mensaje_id=msg.get("id", ""),
                 es_propio=msg.get("from_me", False),
+                # Si el mensaje es un reply, Whapi incluye el ID del mensaje citado
+                quoted_id=msg.get("context", {}).get("quoted_id", ""),
             ))
         return mensajes
 

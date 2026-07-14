@@ -53,6 +53,22 @@ class ControlHumano(Base):
     desde: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class NotificacionEquipo(Base):
+    """
+    Notificaciones enviadas al equipo. Guarda el ID del mensaje de WhatsApp
+    enviado a Grace para poder vincular su respuesta (reply/cita) con el
+    cliente correcto y reenviarle la contestación.
+    """
+    __tablename__ = "notificaciones_equipo"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    mensaje_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    telefono_cliente: Mapped[str] = mapped_column(String(50), index=True)
+    resumen: Mapped[str] = mapped_column(Text)
+    estado: Mapped[str] = mapped_column(String(20), default="pendiente")  # pendiente | respondida
+    creado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 async def inicializar_db():
     """Crea las tablas si no existen."""
     async with engine.begin() as conn:
@@ -131,6 +147,47 @@ async def esta_pausada(telefono: str) -> bool:
     async with async_session() as session:
         resultado = await session.get(ControlHumano, telefono)
         return resultado is not None
+
+
+async def guardar_notificacion(mensaje_id: str, telefono_cliente: str, resumen: str):
+    """Registra una notificación enviada al equipo, vinculada al ID del mensaje de WhatsApp."""
+    async with async_session() as session:
+        session.add(NotificacionEquipo(
+            mensaje_id=mensaje_id,
+            telefono_cliente=telefono_cliente,
+            resumen=resumen,
+        ))
+        await session.commit()
+    logger.info(f"Notificacion registrada: mensaje {mensaje_id} → cliente {telefono_cliente}")
+
+
+async def buscar_notificacion(mensaje_id: str) -> dict | None:
+    """
+    Busca la notificación asociada a un mensaje enviado al equipo.
+    Se usa cuando Grace responde citando la notificación.
+    """
+    async with async_session() as session:
+        query = select(NotificacionEquipo).where(NotificacionEquipo.mensaje_id == mensaje_id)
+        result = await session.execute(query)
+        notificacion = result.scalar_one_or_none()
+        if notificacion is None:
+            return None
+        return {
+            "telefono_cliente": notificacion.telefono_cliente,
+            "resumen": notificacion.resumen,
+            "estado": notificacion.estado,
+        }
+
+
+async def marcar_notificacion_respondida(mensaje_id: str):
+    """Marca una notificación como respondida por el equipo."""
+    async with async_session() as session:
+        query = select(NotificacionEquipo).where(NotificacionEquipo.mensaje_id == mensaje_id)
+        result = await session.execute(query)
+        notificacion = result.scalar_one_or_none()
+        if notificacion:
+            notificacion.estado = "respondida"
+            await session.commit()
 
 
 async def limpiar_historial(telefono: str):

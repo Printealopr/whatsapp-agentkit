@@ -20,6 +20,9 @@ logger = logging.getLogger("agentkit")
 # Cliente de Anthropic
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+# Modelo de Claude a utilizar (configurable vía .env)
+MODELO_CLAUDE = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+
 # Herramientas disponibles para Printealito
 HERRAMIENTAS = [
     {
@@ -120,7 +123,7 @@ async def generar_respuesta(mensaje: str, historial: list[dict], telefono: str =
 
     try:
         response = await client.messages.create(
-            model="claude-sonnet-4-6",
+            model=MODELO_CLAUDE,
             max_tokens=1024,
             system=system_prompt,
             messages=mensajes,
@@ -162,7 +165,7 @@ async def generar_respuesta(mensaje: str, historial: list[dict], telefono: str =
 
             # Segunda llamada: Claude genera la respuesta final para el cliente
             response = await client.messages.create(
-                model="claude-sonnet-4-6",
+                model=MODELO_CLAUDE,
                 max_tokens=1024,
                 system=system_prompt,
                 messages=mensajes,

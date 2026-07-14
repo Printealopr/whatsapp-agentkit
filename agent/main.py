@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 
 from agent.brain import generar_respuesta
 from agent.memory import (inicializar_db, guardar_mensaje, obtener_historial,
-                          pausar_conversacion, reanudar_conversacion, esta_pausada)
+                          pausar_conversacion, reanudar_conversacion, esta_pausada,
+                          buscar_notificacion, marcar_notificacion_respondida)
 from agent.providers import obtener_proveedor
 
 load_dotenv()
@@ -67,6 +68,61 @@ async def webhook_verificacion(request: Request):
 COMANDOS_PAUSA = {"#abdiel", "#grace"}
 COMANDO_REANUDAR = "#bot"
 
+# Número del equipo (Grace) — mismo que usa notificar_equipo en tools.py
+NUMERO_EQUIPO = os.getenv("NUMERO_NOTIFICACIONES", "17879519388")
+
+
+async def manejar_respuesta_equipo(msg):
+    """
+    Procesa un mensaje de Grace en el chat del equipo.
+    Si es un reply a una notificación, reenvía la respuesta al cliente
+    correspondiente a través de Printealito.
+    """
+    if not msg.quoted_id:
+        await proveedor.enviar_mensaje(
+            NUMERO_EQUIPO,
+            "Para contestarle a un cliente, desliza su notificación y responde sobre ella 🙌"
+        )
+        return
+
+    notificacion = await buscar_notificacion(msg.quoted_id)
+    if notificacion is None:
+        await proveedor.enviar_mensaje(
+            NUMERO_EQUIPO,
+            "No encontré la consulta asociada a ese mensaje. "
+            "Responde citando la notificación del cliente (⚠️) 🙏"
+        )
+        return
+
+    telefono_cliente = notificacion["telefono_cliente"]
+    logger.info(f"Respuesta del equipo para {telefono_cliente}: {msg.texto}")
+
+    # Printealito redacta la respuesta al cliente con la información del equipo
+    instruccion = (
+        f"[RESPUESTA DEL EQUIPO DE PRINTEALO] Sobre la consulta pendiente "
+        f"\"{notificacion['resumen']}\", el equipo respondió: \"{msg.texto}\". "
+        f"Transmite esta respuesta al cliente de forma natural y amigable, "
+        f"con tu tono de siempre. No menciones al equipo interno ni procesos internos."
+    )
+    historial = await obtener_historial(telefono_cliente)
+    respuesta = await generar_respuesta(instruccion, historial, telefono_cliente)
+
+    await guardar_mensaje(telefono_cliente, "user", instruccion)
+    await guardar_mensaje(telefono_cliente, "assistant", respuesta)
+
+    enviado = await proveedor.enviar_mensaje(telefono_cliente, respuesta)
+    if enviado:
+        await marcar_notificacion_respondida(msg.quoted_id)
+        await proveedor.enviar_mensaje(
+            NUMERO_EQUIPO,
+            f"✅ Listo — le respondí al cliente {telefono_cliente}."
+        )
+    else:
+        await proveedor.enviar_mensaje(
+            NUMERO_EQUIPO,
+            f"⚠️ No pude enviarle el mensaje al cliente {telefono_cliente}. Intenta de nuevo."
+        )
+
 
 def detectar_comando_control(texto: str) -> str | None:
     """
@@ -113,6 +169,12 @@ async def webhook_handler(request: Request):
                     await reanudar_conversacion(msg.telefono)
                     logger.info(f"Bot retoma control de {msg.telefono}")
                 # Ignorar todos los demás mensajes propios
+                continue
+
+            # ── Respuesta del equipo (Grace) a una notificación ───────────────
+            # Grace responde citando la notificación; el bot reenvía al cliente.
+            if msg.telefono == NUMERO_EQUIPO:
+                await manejar_respuesta_equipo(msg)
                 continue
 
             # ── Mensaje del cliente ───────────────────────────────────────────
